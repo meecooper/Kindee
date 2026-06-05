@@ -387,8 +387,9 @@ select.input-field{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:/
           </svg>
           <div class="ring-text">
             <div style="font-size:22px;font-weight:800;line-height:1;" id="dash-cal">0</div>
-            <div style="font-size:9px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">net kcal</div>
+            <div style="font-size:9px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">kcal ที่กิน</div>
             <div style="font-size:11px;font-weight:600;margin-top:2px;color:var(--accent);" id="dash-rem"></div>
+            <div style="font-size:9px;color:var(--text3);margin-top:2px;" id="dash-net-note"></div>
           </div>
         </div>
         <div class="macro-grid">
@@ -633,18 +634,22 @@ select.input-field{background-image:url("data:image/svg+xml,%3Csvg xmlns='http:/
     <div id="ftab-content-today">
       <!-- Net Calories Card -->
       <div class="ft-net-card" id="ft-net-card">
-        <div style="font-size:11px;color:var(--text3);margin-bottom:4px;">NET CALORIES วันนี้</div>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:4px;">กินวันนี้ vs เป้า</div>
         <div class="ft-net-val" id="ft-net-val" style="color:var(--green)">0</div>
         <div class="ft-net-sub">kcal คงเหลือ</div>
-        <div class="ft-net-row">
+        <div class="ft-net-row" style="margin-top:8px;">
           <span>🍽️ กิน <b id="ft-eaten">0</b></span>
-          <span style="color:var(--text3)">−</span>
-          <span>🔥 เผา <b id="ft-burned">0</b></span>
-          <span style="color:var(--text3)">−</span>
-          <span>👟 ก้าว <b id="ft-step-cal">0</b></span>
-          <span style="color:var(--text3)">=</span>
-          <span>🎯 เป้า <b id="ft-goal-disp">0</b></span>
+          <span style="color:var(--text3)">／</span>
+          <span>🎯 เป้า <b id="ft-goal-disp">0</b> kcal</span>
         </div>
+        <div class="ft-net-row" style="margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,0.06);">
+          <span>net จริง: <b id="ft-net-result">0</b> kcal</span>
+          <span style="color:var(--text3)">•</span>
+          <span>🔥 เผา <b id="ft-burned">0</b></span>
+          <span style="color:var(--text3)">•</span>
+          <span>👟 ก้าว <b id="ft-step-cal">0</b></span>
+        </div>
+        <div style="font-size:10px;color:var(--text3);margin-top:6px;">💡 กิจกรรมรวมใน TDEE แล้ว — คุมที่ยอดกินตามเป้า</div>
       </div>
 
       <!-- Today stats -->
@@ -1414,7 +1419,7 @@ var curImg = null, curImgType = 'image/jpeg', curLabel = '', curResult = null, c
 var menuItems = [], menuId = 0;
 
 // Goal-centered sync version: clears stale cached AI text when logic changes
-var APP_LOGIC_VERSION = 'v20_polar_load_context_2026_05_31';
+var APP_LOGIC_VERSION = 'v21_gross_intake_primary_2026_06_04';
 try {
   if (localStorage.getItem('gd_logic_version') !== APP_LOGIC_VERSION) {
     localStorage.removeItem('gd_daily_summary');
@@ -2830,12 +2835,17 @@ function updateDash() {
   var isDeficit = rem >= 0; // true = ยังต่ำกว่าเป้า (ดี), false = เกินเป้า
 
   document.getElementById('dash-count').textContent = meals.length+' มื้อ';
-  document.getElementById('dash-cal').textContent = Math.round(netEaten);
+  // v21: primary = gross intake
+  document.getElementById('dash-cal').textContent = Math.round(t.cal);
 
-  // rem label + color
+  // rem label based on gross intake vs goal
+  var grossRemain = g.cal - t.cal;
   var remEl = document.getElementById('dash-rem');
-  remEl.textContent = isDeficit ? 'เหลือ '+rem+' (net)' : 'เกิน '+Math.abs(rem)+' (net)';
-  remEl.style.color = isDeficit ? 'var(--green)' : 'var(--red)';
+  remEl.textContent = grossRemain >= 0 ? 'เหลือกินได้ '+Math.round(grossRemain) : 'กินเกิน '+Math.round(Math.abs(grossRemain));
+  remEl.style.color = grossRemain >= 0 ? 'var(--green)' : 'var(--red)';
+  // net as secondary note
+  var netNote = document.getElementById('dash-net-note');
+  if (netNote) { netNote.textContent = 'net '+Math.round(netEaten)+' kcal (หักกิจกรรม)'; }
 
   var dispPro = parseFloat(t.pro.toFixed(2));
   var dispCrb = parseFloat(t.crb.toFixed(2));
@@ -2847,10 +2857,11 @@ function updateDash() {
   document.getElementById('d-g').textContent = g.cal;
 
   // Ring: fill based on net eaten vs goal, color = green when deficit, red when over
-  var pct = Math.min(netEaten / g.cal, 1);
+  // v21: ring fill based on gross intake
+  var pct = Math.min(t.cal / g.cal, 1);
   var offset = 314 - (314 * Math.max(pct, 0));
   document.getElementById('ringFill').style.strokeDashoffset = offset;
-  document.getElementById('ringFill').style.stroke = isDeficit ? 'var(--green)' : 'var(--red)';
+  document.getElementById('ringFill').style.stroke = (t.cal <= g.cal) ? 'var(--green)' : 'var(--red)';
 
   setW('b-p',t.pro,g.pro); setW('b-c',t.crb,g.crb); setW('b-f',t.fat,g.fat); setW('b-g',t.cal,g.cal);
   document.getElementById('gb-cal').textContent = dispCal+'/'+g.cal+' kcal';
@@ -3634,11 +3645,15 @@ function updateFitnessUI() {
   document.getElementById('ft-burned').textContent = totalBurn;
   document.getElementById('ft-step-cal').textContent = Math.round(neatCal);
   document.getElementById('ft-goal-disp').textContent = S.goals.cal;
-  var netRemain = S.goals.cal - (eaten - totalActive);
+  // v21: primary = gross remain (กิน vs เป้า)
+  var grossRemain = S.goals.cal - eaten;
   var netEl = document.getElementById('ft-net-val');
-  netEl.textContent = Math.abs(netRemain);
-  document.querySelector('#ft-net-card .ft-net-sub').textContent = netRemain >= 0 ? 'kcal คงเหลือ' : 'kcal เกินเป้า';
-  netEl.style.color = netRemain >= 0 ? 'var(--green)' : 'var(--red)';
+  netEl.textContent = Math.abs(Math.round(grossRemain));
+  document.querySelector('#ft-net-card .ft-net-sub').textContent = grossRemain >= 0 ? 'kcal คงเหลือ' : 'kcal เกินเป้า';
+  netEl.style.color = grossRemain >= 0 ? 'var(--green)' : 'var(--red)';
+  // net จริง = กิน − เผา (secondary)
+  var netResult = document.getElementById('ft-net-result');
+  if (netResult) { var nr = eaten - totalActive; netResult.textContent = Math.round(nr); netResult.style.color = nr <= S.goals.cal ? 'var(--green)' : 'var(--red)'; }
   // Workout list
   var el = document.getElementById('ft-today-list');
   if (ws.length === 0) {
